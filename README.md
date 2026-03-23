@@ -2,6 +2,11 @@
 
 Gamdl GUI is a modern, user-friendly graphical interface for [gamdl](https://github.com/gamdl/gamdl) (an Apple Music Downloader), built with Python and `customtkinter`. It provides an easy way to download songs, albums, playlists, and music videos from Apple Music without needing to use the command line directly.
 
+
+<img width="1700" height="1356" alt="image" src="https://github.com/user-attachments/assets/da27eb86-1c9d-455b-b0d8-6bdbc14422a2" />
+
+
+
 ## Features
 
 - **Modern Interface**: Built with `customtkinter` for a sleek, dark/light mode compatible interface.
