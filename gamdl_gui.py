@@ -5,6 +5,8 @@ import threading
 import sys
 import os
 import shutil
+import json
+import locale
 
 ctk.set_appearance_mode("System")
 ctk.set_default_color_theme("blue")
@@ -13,7 +15,13 @@ class GamdlGUI(ctk.CTk):
     def __init__(self):
         super().__init__()
         
-        self.title("Gamdl GUI - Apple Music Downloader")
+        self.config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+        self.langs_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "langs")
+        self.current_lang = self.load_config_lang()
+        self.lang_texts = {}
+        self.load_language(self.current_lang)
+        
+        self.title(self.tr("app_title"))
         self.geometry("850x650")
         
         # main layout
@@ -23,39 +31,55 @@ class GamdlGUI(ctk.CTk):
         # Sidebar
         self.sidebar_frame = ctk.CTkFrame(self, width=220, corner_radius=0)
         self.sidebar_frame.grid(row=0, column=0, rowspan=4, sticky="nsew")
-        self.sidebar_frame.grid_rowconfigure(8, weight=1)
+        self.sidebar_frame.grid_rowconfigure(10, weight=1)
         
-        self.logo_label = ctk.CTkLabel(self.sidebar_frame, text="Gamdl GUI", font=ctk.CTkFont(size=24, weight="bold"))
+        self.logo_label = ctk.CTkLabel(self.sidebar_frame, text=self.tr("logo_text"), font=ctk.CTkFont(size=24, weight="bold"))
         self.logo_label.grid(row=0, column=0, padx=20, pady=(20, 10))
         
         # Cookie selection
-        self.cookie_label = ctk.CTkLabel(self.sidebar_frame, text="Cookies File (cookies.txt):")
+        self.cookie_label = ctk.CTkLabel(self.sidebar_frame, text=self.tr("cookie_label"))
         self.cookie_label.grid(row=1, column=0, padx=20, pady=(10, 0), sticky="w")
-        self.cookie_btn = ctk.CTkButton(self.sidebar_frame, text="Import cookies.txt")
+        self.cookie_btn = ctk.CTkButton(self.sidebar_frame, text=self.tr("cookie_btn"))
         self.cookie_btn.grid(row=2, column=0, padx=20, pady=5)
         self.cookie_btn.bind("<Button-1>", self.select_cookie)
-        self.cookie_path = ""
+        
+        default_cookie = os.path.join(os.path.expanduser("~"), ".gamdl", "cookies.txt")
+        if os.path.exists(default_cookie):
+            self.cookie_path = default_cookie
+        else:
+            self.cookie_path = ""
         
         # Log level
-        self.log_level_label = ctk.CTkLabel(self.sidebar_frame, text="Log Level:")
+        self.log_level_label = ctk.CTkLabel(self.sidebar_frame, text=self.tr("log_level_label"))
         self.log_level_label.grid(row=3, column=0, padx=20, pady=(10, 0), sticky="w")
         self.log_level_var = ctk.StringVar(value="INFO")
         self.log_level_menu = ctk.CTkOptionMenu(self.sidebar_frame, values=["DEBUG", "INFO", "WARNING", "ERROR"], variable=self.log_level_var)
         self.log_level_menu.grid(row=4, column=0, padx=20, pady=5)
         
         # Download Mode
-        self.dl_mode_label = ctk.CTkLabel(self.sidebar_frame, text="Download Mode:")
+        self.dl_mode_label = ctk.CTkLabel(self.sidebar_frame, text=self.tr("dl_mode_label"))
         self.dl_mode_label.grid(row=5, column=0, padx=20, pady=(10, 0), sticky="w")
         self.dl_mode_var = ctk.StringVar(value="ytdlp")
         self.dl_mode_menu = ctk.CTkOptionMenu(self.sidebar_frame, values=["ytdlp", "nm3u8dlre"], variable=self.dl_mode_var)
         self.dl_mode_menu.grid(row=6, column=0, padx=20, pady=5)
+
+        # Language Selection
+        self.language_label = ctk.CTkLabel(self.sidebar_frame, text=self.tr("language_label"))
+        self.language_label.grid(row=7, column=0, padx=20, pady=(10, 0), sticky="w")
         
-        self.version_label = ctk.CTkLabel(self.sidebar_frame, text="Version: 0.5 By Carlchina", text_color="gray", font=ctk.CTkFont(size=10))
-        self.version_label.grid(row=8, column=0, padx=20, pady=(0, 0), sticky="s")
+        self.lang_map = {"English": "en", "中文": "zh"}
+        self.inv_lang_map = {"en": "English", "zh": "中文"}
+        
+        self.language_var = ctk.StringVar(value=self.inv_lang_map.get(self.current_lang, "English"))
+        self.language_menu = ctk.CTkOptionMenu(self.sidebar_frame, values=["English", "中文"], variable=self.language_var, command=self.on_language_change)
+        self.language_menu.grid(row=8, column=0, padx=20, pady=5)
+        
+        self.version_label = ctk.CTkLabel(self.sidebar_frame, text=self.tr("version_label"), text_color="gray", font=ctk.CTkFont(size=10))
+        self.version_label.grid(row=10, column=0, padx=20, pady=(0, 0), sticky="s")
         
         # Action button
-        self.download_btn = ctk.CTkButton(self.sidebar_frame, text="Start Download 🎉", height=40)
-        self.download_btn.grid(row=9, column=0, padx=20, pady=(10, 20), sticky="s")
+        self.download_btn = ctk.CTkButton(self.sidebar_frame, text=self.tr("start_download_btn"), height=40)
+        self.download_btn.grid(row=11, column=0, padx=20, pady=(10, 20), sticky="s")
         self.download_btn.bind("<Button-1>", self.start_download)
         
         # Main content
@@ -65,7 +89,7 @@ class GamdlGUI(ctk.CTk):
         self.main_frame.grid_rowconfigure(8, weight=1)
         
         # URL
-        self.url_label = ctk.CTkLabel(self.main_frame, text="🎵 Apple Music URLs (songs, albums, videos, one per line):", font=ctk.CTkFont(weight="bold"))
+        self.url_label = ctk.CTkLabel(self.main_frame, text=self.tr("url_label"), font=ctk.CTkFont(weight="bold"))
         self.url_label.grid(row=0, column=0, padx=20, pady=(10, 0), sticky="w")
         self.url_textbox = ctk.CTkTextbox(self.main_frame, height=100)
         self.url_textbox.grid(row=1, column=0, padx=20, pady=5, sticky="ew")
@@ -75,14 +99,14 @@ class GamdlGUI(ctk.CTk):
         self.out_dir_frame.grid(row=2, column=0, padx=20, pady=5, sticky="ew")
         self.out_dir_frame.grid_columnconfigure(1, weight=1)
         
-        self.out_dir_label = ctk.CTkLabel(self.out_dir_frame, text="Output Directory:")
+        self.out_dir_label = ctk.CTkLabel(self.out_dir_frame, text=self.tr("out_dir_label"))
         self.out_dir_label.grid(row=0, column=0, padx=(0, 10), sticky="w")
         self.out_dir_entry = ctk.CTkEntry(self.out_dir_frame, width=300)
         # Default downloads folder
         default_dl = os.path.join(os.path.expanduser("~"), "Downloads", "Apple Music")
         self.out_dir_entry.insert(0, default_dl)
         self.out_dir_entry.grid(row=0, column=1, sticky="ew")
-        self.out_dir_btn = ctk.CTkButton(self.out_dir_frame, text="Browse", width=80)
+        self.out_dir_btn = ctk.CTkButton(self.out_dir_frame, text=self.tr("browse_btn"), width=80)
         self.out_dir_btn.grid(row=0, column=2, padx=(10, 0))
         self.out_dir_btn.bind("<Button-1>", self.select_out_dir)
         
@@ -97,12 +121,12 @@ class GamdlGUI(ctk.CTk):
 
         # Save Cover checkbox
         self.save_cover_var = ctk.BooleanVar(value=True)
-        self.save_cover_cb = ctk.CTkCheckBox(self.opts_frame, text="Save Cover Image", variable=self.save_cover_var)
+        self.save_cover_cb = ctk.CTkCheckBox(self.opts_frame, text=self.tr("save_cover_cb"), variable=self.save_cover_var)
         self.save_cover_cb.grid(row=0, column=0, pady=5, sticky="w")
         
         # Synced lyrics checkbox
         self.synced_lyrics_var = ctk.BooleanVar(value=False)
-        self.synced_lyrics_cb = ctk.CTkCheckBox(self.opts_frame, text="Disable Synced Lyrics", variable=self.synced_lyrics_var)
+        self.synced_lyrics_cb = ctk.CTkCheckBox(self.opts_frame, text=self.tr("synced_lyrics_cb"), variable=self.synced_lyrics_var)
         self.synced_lyrics_cb.grid(row=0, column=1, padx=20, pady=5, sticky="w")
 
         # Console Output
@@ -110,18 +134,98 @@ class GamdlGUI(ctk.CTk):
         self.console_header_frame.grid(row=7, column=0, padx=20, pady=(10, 0), sticky="ew")
         self.console_header_frame.grid_columnconfigure(0, weight=1)
         
-        self.console_label = ctk.CTkLabel(self.console_header_frame, text="Log:", font=ctk.CTkFont(weight="bold"))
+        self.console_label = ctk.CTkLabel(self.console_header_frame, text=self.tr("console_label"), font=ctk.CTkFont(weight="bold"))
         self.console_label.grid(row=0, column=0, sticky="w")
         
-        self.clear_console_btn = ctk.CTkButton(self.console_header_frame, text="Clear Console", width=80)
+        self.clear_console_btn = ctk.CTkButton(self.console_header_frame, text=self.tr("clear_console_btn"), width=80)
         self.clear_console_btn.grid(row=0, column=1, sticky="e")
         self.clear_console_btn.bind("<Button-1>", self.clear_console)
         self.console_textbox = ctk.CTkTextbox(self.main_frame, font=ctk.CTkFont(family="Courier", size=12))
         self.console_textbox.grid(row=8, column=0, padx=20, pady=10, sticky="nsew")
         self.console_textbox.configure(state="disabled")
 
+    def load_config_lang(self):
+        if os.path.exists(self.config_path):
+            try:
+                with open(self.config_path, "r", encoding="utf-8") as f:
+                    config = json.load(f)
+                    return config.get("language", "en")
+            except:
+                pass
+        
+        # fallback to system language
+        try:
+            sys_lang, _ = locale.getdefaultlocale()
+            if sys_lang and sys_lang.startswith("zh"):
+                return "zh"
+        except:
+            pass
+        return "en"
+
+    def save_config_lang(self, lang_code):
+        try:
+            config = {}
+            if os.path.exists(self.config_path):
+                with open(self.config_path, "r", encoding="utf-8") as f:
+                    config = json.load(f)
+            config["language"] = lang_code
+            with open(self.config_path, "w", encoding="utf-8") as f:
+                json.dump(config, f)
+        except Exception as e:
+            print(f"Failed to save language config: {e}")
+
+    def load_language(self, lang_code):
+        lang_file = os.path.join(self.langs_dir, f"{lang_code}.json")
+        if not os.path.exists(lang_file):
+            lang_file = os.path.join(self.langs_dir, "en.json")
+        
+        if os.path.exists(lang_file):
+            try:
+                with open(lang_file, "r", encoding="utf-8") as f:
+                    self.lang_texts = json.load(f)
+            except Exception as e:
+                print(f"Failed to load language file {lang_file}: {e}")
+                self.lang_texts = {}
+        else:
+            self.lang_texts = {}
+
+    def tr(self, key):
+        return self.lang_texts.get(key, key)
+
+    def on_language_change(self, choice):
+        lang_code = self.lang_map.get(choice, "en")
+        self.current_lang = lang_code
+        self.save_config_lang(lang_code)
+        self.load_language(lang_code)
+        self.update_ui_texts()
+
+    def update_ui_texts(self):
+        self.title(self.tr("app_title"))
+        self.logo_label.configure(text=self.tr("logo_text"))
+        self.cookie_label.configure(text=self.tr("cookie_label"))
+        
+        # Only update if the button doesn't say "cookie.txt Saved" currently
+        if self.cookie_path:
+            self.cookie_btn.configure(text=self.tr("cookie_saved_btn_text"))
+        else:
+            self.cookie_btn.configure(text=self.tr("cookie_btn"))
+            
+        self.log_level_label.configure(text=self.tr("log_level_label"))
+        self.dl_mode_label.configure(text=self.tr("dl_mode_label"))
+        self.language_label.configure(text=self.tr("language_label"))
+        self.version_label.configure(text=self.tr("version_label"))
+        self.download_btn.configure(text=self.tr("start_download_btn"))
+        
+        self.url_label.configure(text=self.tr("url_label"))
+        self.out_dir_label.configure(text=self.tr("out_dir_label"))
+        self.out_dir_btn.configure(text=self.tr("browse_btn"))
+        self.save_cover_cb.configure(text=self.tr("save_cover_cb"))
+        self.synced_lyrics_cb.configure(text=self.tr("synced_lyrics_cb"))
+        self.console_label.configure(text=self.tr("console_label"))
+        self.clear_console_btn.configure(text=self.tr("clear_console_btn"))
+
     def select_cookie(self, event=None):
-        file_path = filedialog.askopenfilename(title="Select cookies.txt", filetypes=[("Text Files", "*.txt"), ("All Files", "*.*")])
+        file_path = filedialog.askopenfilename(title=self.tr("select_cookie_title"), filetypes=[("Text Files", "*.txt"), ("All Files", "*.*")])
         if file_path:
             try:
                 gamdl_dir = os.path.join(os.path.expanduser("~"), ".gamdl")
@@ -131,10 +235,10 @@ class GamdlGUI(ctk.CTk):
                     os.remove(dest_path)
                 shutil.copy(file_path, dest_path)
                 self.cookie_path = dest_path
-                self.cookie_btn.configure(text="cookie.txt Saved")
-                self.log_console(f"[*] Cookie saved to: {dest_path}")
+                self.cookie_btn.configure(text=self.tr("cookie_saved_btn_text"))
+                self.log_console(self.tr("cookie_saved_log").format(dest_path))
             except Exception as e:
-                messagebox.showerror("Error", f"Failed to copy cookie file:\n{e}")
+                messagebox.showerror(self.tr("error_title"), self.tr("cookie_error_msg").format(e))
 
     def clear_console(self, event=None):
         self.console_textbox.configure(state="normal")
@@ -142,7 +246,7 @@ class GamdlGUI(ctk.CTk):
         self.console_textbox.configure(state="disabled")
 
     def select_out_dir(self, event=None):
-        dir_path = filedialog.askdirectory(title="Select Download Directory")
+        dir_path = filedialog.askdirectory(title=self.tr("select_out_dir_title"))
         if dir_path:
             self.out_dir_entry.delete(0, ctk.END)
             self.out_dir_entry.insert(0, dir_path)
@@ -160,8 +264,17 @@ class GamdlGUI(ctk.CTk):
         urls = self.url_textbox.get("1.0", ctk.END).strip().split('\n')
         urls = [url.strip() for url in urls if url.strip()]
         
+        for url in urls:
+            if not url.startswith("https"):
+                messagebox.showerror(self.tr("error_title"), self.tr("invalid_url_error_msg"))
+                return
+        
         if not urls:
-            messagebox.showerror("Error", "Please paste at least one Apple Music URL.")
+            messagebox.showerror(self.tr("error_title"), self.tr("empty_url_error_msg"))
+            return
+
+        if not self.cookie_path and not os.path.exists(os.path.join(os.path.expanduser("~"), ".gamdl", "cookies.txt")):
+            messagebox.showerror(self.tr("error_title"), self.tr("missing_cookie_error_msg"))
             return
 
         cmd = ["gamdl"]
@@ -198,7 +311,7 @@ class GamdlGUI(ctk.CTk):
             
         cmd.extend(urls)
         
-        self.log_console(f"\n[>] Executing: {' '.join(cmd)}")
+        self.log_console(self.tr("executing_log").format(' '.join(cmd)))
         self.download_btn.configure(state="disabled")
         
         threading.Thread(target=self.run_process, args=(cmd,), daemon=True).start()
@@ -215,14 +328,14 @@ class GamdlGUI(ctk.CTk):
             return_code = process.wait()
             
             if return_code == 0:
-                self.after(0, self.log_console, "\n[✔] Download sequence completed successfully.")
+                self.after(0, self.log_console, self.tr("success_log"))
             else:
-                self.after(0, self.log_console, f"\n[!] gamdl process exited with code {return_code}")
+                self.after(0, self.log_console, self.tr("process_exit_log").format(return_code))
                 
         except FileNotFoundError:
-            self.after(0, self.log_console, "\n[X] Error: 'gamdl' command not found. Please make sure it is installed (pip install gamdl) and in your system PATH.")
+            self.after(0, self.log_console, self.tr("cmd_not_found_log"))
         except Exception as e:
-            self.after(0, self.log_console, f"\n[X] Error launching command: {str(e)}")
+            self.after(0, self.log_console, self.tr("launch_error_log").format(str(e)))
             
         finally:
             self.after(0, lambda: self.download_btn.configure(state="normal"))
