@@ -28,5 +28,9 @@
   "cmd_not_found_log": "\n[X] 错误: 找不到 'gamdl' 命令。请确保其已安装 (pip install gamdl) 并已添加至系统路径 (PATH)。",
   "launch_error_log": "\n[X] 启动命令出错: {}",
   "missing_cookie_error_msg": "请先导入 cookies.txt 文件。",
-  "invalid_url_error_msg": "所有的链接都必须以 'https' 开头。"
+  "invalid_url_error_msg": "所有的链接都必须以 'https' 开头。",
+  "stop_dl_btn": "终止",
+  "stop_dl_confirm_title": "是否确认",
+  "stop_dl_confirm_msg": "是否确定终止下载？",
+  "dl_aborted_log": "\n[!] 下载已手动终止。"
 }

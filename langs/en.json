@@ -28,5 +28,9 @@
   "cmd_not_found_log": "\n[X] Error: 'gamdl' command not found. Please make sure it is installed (pip install gamdl) and in your system PATH.",
   "launch_error_log": "\n[X] Error launching command: {}",
   "missing_cookie_error_msg": "Please import a cookies.txt file first.",
-  "invalid_url_error_msg": "All URLs must start with 'https'."
+  "invalid_url_error_msg": "All URLs must start with 'https'.",
+  "stop_dl_btn": "Stop Download",
+  "stop_dl_confirm_title": "Confirm Stop",
+  "stop_dl_confirm_msg": "Are you sure you want to abort the download?",
+  "dl_aborted_log": "\n[!] Download manually aborted."
 }

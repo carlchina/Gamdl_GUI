@@ -7,6 +7,7 @@ import os
 import shutil
 import json
 import locale
+import re
 
 ctk.set_appearance_mode("System")
 ctk.set_default_color_theme("blue")
@@ -82,6 +83,25 @@ class GamdlGUI(ctk.CTk):
         self.download_btn.grid(row=11, column=0, padx=20, pady=(10, 20), sticky="s")
         self.download_btn.bind("<Button-1>", self.start_download)
         
+        # Download status label
+        self.download_name_label = ctk.CTkLabel(self.sidebar_frame, text="", text_color="gray", font=ctk.CTkFont(size=11))
+        self.download_name_label.grid(row=12, column=0, padx=20, pady=(5, 0), sticky="ew")
+        self.download_name_label.grid_remove() # Hide initially
+        
+        # Progress bar
+        self.progress_bar = ctk.CTkProgressBar(self.sidebar_frame, mode="indeterminate")
+        self.progress_bar.grid(row=13, column=0, padx=20, pady=(5, 20), sticky="ew")
+        self.progress_bar.set(0)
+        self.progress_bar.grid_remove() # Hide initially
+        
+        # Stop Button
+        self.stop_btn = ctk.CTkButton(self.sidebar_frame, text=self.tr("stop_dl_btn"), fg_color="#FF5555", hover_color="#CC0000")
+        self.stop_btn.grid(row=14, column=0, padx=20, pady=(0, 20), sticky="ew")
+        self.stop_btn.bind("<Button-1>", self.stop_download)
+        self.stop_btn.grid_remove()
+
+        self.current_process = None
+        
         # Main content
         self.main_frame = ctk.CTkFrame(self)
         self.main_frame.grid(row=0, column=1, sticky="nsew", padx=10, pady=10)
@@ -143,6 +163,16 @@ class GamdlGUI(ctk.CTk):
         self.console_textbox = ctk.CTkTextbox(self.main_frame, font=ctk.CTkFont(family="Courier", size=12))
         self.console_textbox.grid(row=8, column=0, padx=20, pady=10, sticky="nsew")
         self.console_textbox.configure(state="disabled")
+        
+        # Configure ANSI colors for console
+        for i, color in zip(["30", "31", "32", "33", "34", "35", "36", "37"], 
+                            ["gray", "#FF5555", "#50FA7B", "#F1FA8C", "#BD93F9", "#FF79C6", "#8BE9FD", "#F8F8F2"]):
+            self.console_textbox.tag_config(f"ansi_{i}", foreground=color)
+        for i, color in zip(["90", "91", "92", "93", "94", "95", "96", "97"], 
+                            ["#6272A4", "#FF6E6E", "#69FF94", "#FFFFA5", "#D6ACFF", "#FF92DF", "#A4FFFF", "#FFFFFF"]):
+            self.console_textbox.tag_config(f"ansi_{i}", foreground=color)
+
+        self.current_ansi_tags = ()
 
     def load_config_lang(self):
         if os.path.exists(self.config_path):
@@ -223,6 +253,7 @@ class GamdlGUI(ctk.CTk):
         self.synced_lyrics_cb.configure(text=self.tr("synced_lyrics_cb"))
         self.console_label.configure(text=self.tr("console_label"))
         self.clear_console_btn.configure(text=self.tr("clear_console_btn"))
+        self.stop_btn.configure(text=self.tr("stop_dl_btn"))
 
     def select_cookie(self, event=None):
         file_path = filedialog.askopenfilename(title=self.tr("select_cookie_title"), filetypes=[("Text Files", "*.txt"), ("All Files", "*.*")])
@@ -253,7 +284,27 @@ class GamdlGUI(ctk.CTk):
 
     def log_console(self, text):
         self.console_textbox.configure(state="normal")
-        self.console_textbox.insert(ctk.END, text + "\n")
+        
+        ansi_regex = re.compile(r'(\x1b\[[0-9;]*[mK])')
+        parts = ansi_regex.split(text + "\n")
+        
+        for part in parts:
+            if part.startswith('\x1b['):
+                # parse ansi sequence
+                code_str = part[2:-1].replace('K', 'm').strip('m')
+                codes = code_str.split(';')
+                for code in codes:
+                    if code == '0' or code == '' or code == '39':
+                        self.current_ansi_tags = ()
+                    elif code in [str(i) for i in range(30, 38)] + [str(i) for i in range(90, 98)]:
+                        self.current_ansi_tags = tuple(t for t in self.current_ansi_tags if not t.startswith('ansi_')) + (f"ansi_{code}",)
+            else:
+                if part:
+                    if self.current_ansi_tags:
+                        self.console_textbox.insert(ctk.END, part, tags=self.current_ansi_tags)
+                    else:
+                        self.console_textbox.insert(ctk.END, part)
+                        
         self.console_textbox.see(ctk.END)
         self.console_textbox.configure(state="disabled")
 
@@ -314,21 +365,79 @@ class GamdlGUI(ctk.CTk):
         self.log_console(self.tr("executing_log").format(' '.join(cmd)))
         self.download_btn.configure(state="disabled")
         
+        self.progress_bar.grid()
+        self.progress_bar.configure(mode="indeterminate")
+        self.progress_bar.start()
+        
+        self.download_name_label.configure(text="...")
+        self.download_name_label.grid()
+        
+        self.stop_btn.grid()
+        
         threading.Thread(target=self.run_process, args=(cmd,), daemon=True).start()
+
+    def stop_download(self, event=None):
+        if self.current_process and self.current_process.poll() is None:
+            if messagebox.askyesno(self.tr("stop_dl_confirm_title"), self.tr("stop_dl_confirm_msg")):
+                try:
+                    self.current_process.kill()
+                    self.log_console(self.tr("dl_aborted_log"))
+                except Exception as e:
+                    pass
+
+    def extract_download_name(self, line):
+        patterns = [
+            r'Downloading\s+[\'"]([^\'"]+)[\'"]',
+            r'Destination:\s*(.+)',
+            r'Task Start:\s*(.+)',
+            r'Saving to:\s*(.+)'
+        ]
+        for p in patterns:
+            match = re.search(p, line, re.IGNORECASE)
+            if match:
+                name = match.group(1).strip()
+                return os.path.basename(name)
+        return None
+
+    def update_progress(self, line):
+        match = re.search(r'(\d+(?:\.\d+)?)\s*%', line)
+        if match:
+            try:
+                percent = float(match.group(1))
+                if self.progress_bar.cget("mode") == "indeterminate":
+                    self.progress_bar.stop()
+                    self.progress_bar.configure(mode="determinate")
+                self.progress_bar.set(percent / 100.0)
+            except ValueError:
+                pass
+                
+        name = self.extract_download_name(line)
+        if name:
+            if len(name) > 25:
+                # Add a bit of safety for very long filenames
+                name = name[:22] + "..."
+            self.download_name_label.configure(text=name)
 
     def run_process(self, cmd):
         try:
-            # Run command unbuffered
-            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, universal_newlines=True) # pyright: ignore
+            # Run command unbuffered and force color
+            env = os.environ.copy()
+            env["FORCE_COLOR"] = "1"
+            env["CLICOLOR_FORCE"] = "1"
+            self.current_process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, universal_newlines=True, env=env) # pyright: ignore
             
-            for line in iter(process.stdout.readline, ''): # pyright: ignore
-                self.after(0, self.log_console, line.strip())
+            for line in iter(self.current_process.stdout.readline, ''): # pyright: ignore
+                line_str = line.strip()
+                self.after(0, self.log_console, line_str)
+                self.after(0, self.update_progress, line_str)
                 
-            process.stdout.close() # pyright: ignore
-            return_code = process.wait()
+            self.current_process.stdout.close() # pyright: ignore
+            return_code = self.current_process.wait()
             
             if return_code == 0:
                 self.after(0, self.log_console, self.tr("success_log"))
+            elif return_code < 0 or return_code == 137 or return_code == 9:
+                pass
             else:
                 self.after(0, self.log_console, self.tr("process_exit_log").format(return_code))
                 
@@ -338,7 +447,12 @@ class GamdlGUI(ctk.CTk):
             self.after(0, self.log_console, self.tr("launch_error_log").format(str(e)))
             
         finally:
+            self.current_process = None
             self.after(0, lambda: self.download_btn.configure(state="normal"))
+            self.after(0, lambda: self.progress_bar.stop())
+            self.after(0, lambda: self.progress_bar.grid_remove())
+            self.after(0, lambda: self.download_name_label.grid_remove())
+            self.after(0, lambda: self.stop_btn.grid_remove())
 
 if __name__ == "__main__":
     app = GamdlGUI()
