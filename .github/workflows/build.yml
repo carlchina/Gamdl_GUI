@@ -31,9 +31,9 @@ jobs:
           - { os: windows-latest, variant: webview, artifact: Gamdl-GUI-Windows-x64 }
           - { os: windows-latest, variant: lite,    artifact: Gamdl-GUI-Windows-x64-lite }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
           cache: pip
@@ -87,7 +87,7 @@ jobs:
           Compress-Archive -Path "dist/Gamdl GUI/*" -DestinationPath "${{ matrix.artifact }}.zip"
           Get-Item "${{ matrix.artifact }}.zip" | Select-Object Name, Length
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact }}.zip
@@ -100,7 +100,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: assets
           merge-multiple: true
