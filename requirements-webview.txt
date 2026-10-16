@@ -1,0 +1,3 @@
+# Optional: enables the embedded "Sign in to Apple Music" webview flow.
+# Without it the app still works - use the manual cookies.txt import instead.
+pywebview

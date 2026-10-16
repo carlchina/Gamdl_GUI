@@ -1,3 +1,10 @@
+# macOS
+.DS_Store
+
+# Local runtime state: written by the app on every run and therefore
+# contains absolute user paths (cookies / output directory). Never track.
+/config.json
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
@@ -31,6 +38,8 @@ MANIFEST
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
+# ...but keep our hand-written build recipe
+!gamdl_gui.spec
 
 # Installer logs
 pip-log.txt

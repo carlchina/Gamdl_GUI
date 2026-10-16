@@ -362,7 +362,8 @@ class GamdlGUI(ctk.CTk):
             
         cmd.extend(urls)
         
-        self.log_console(self.tr("executing_log").format(' '.join(cmd)))
+        import shlex
+        self.log_console(self.tr("executing_log").format(shlex.join(cmd)))
         self.download_btn.configure(state="disabled")
         
         self.progress_bar.grid()

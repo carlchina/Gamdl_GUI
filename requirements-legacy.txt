@@ -1,0 +1,2 @@
+# Only needed for the legacy tkinter UI in legacy/gamdl_gui_ctk.py
+customtkinter
