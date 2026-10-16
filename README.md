@@ -26,6 +26,30 @@ Gamdl GUI is a modern, user-friendly graphical interface for [gamdl](https://git
 - **Remembers everything**: output directory, log level, download mode, checkboxes, language, theme and window size are saved to `config.json`.
 - **Multi-language UI**: English / 中文, switchable on the fly.
 
+## Prebuilt downloads
+
+Tagged [releases](https://github.com/carlchina/Gamdl_GUI/releases) contain
+ready-to-run bundles — no Python and no `gamdl` installation needed:
+
+| Platform | Full (embedded sign-in) | Lite (manual `cookies.txt`) |
+| --- | --- | --- |
+| macOS 11+ · Apple silicon | `Gamdl-GUI-macOS-arm64.zip` | `Gamdl-GUI-macOS-arm64-lite.zip` |
+| macOS 11+ · Intel | `Gamdl-GUI-macOS-x86_64.zip` | `Gamdl-GUI-macOS-x86_64-lite.zip` |
+| Windows 10/11 · x64 | `Gamdl-GUI-Windows-x64.zip` | `Gamdl-GUI-Windows-x64-lite.zip` |
+
+Unzip it and run. The **lite** bundles leave out the embedded sign-in webview;
+use **Import cookies.txt** there instead.
+
+> **macOS first launch.** The bundles are ad-hoc signed only (no Apple
+> Developer ID / notarisation), so Gatekeeper refuses the first launch. Either
+> right-click the app → **Open** → **Open**, or clear the quarantine flag once:
+>
+> ```bash
+> xattr -dr com.apple.quarantine "/path/to/Gamdl GUI.app"
+> ```
+
+Each release also ships `SHA256SUMS.txt`.
+
 ## Prerequisites
 
 1. **Python 3.10** or higher (gamdl itself requires ≥ 3.10).
@@ -110,6 +134,7 @@ Gamdl_GUI/
 │   ├── icon.icns               # macOS icon
 │   └── icon.ico                # Windows icon
 ├── gamdl_gui.spec              # PyInstaller build recipe
+├── .github/workflows/build.yml # CI: builds + releases every platform
 ├── requirements.txt            # runtime deps (PySide6 …)
 ├── requirements-webview.txt    # optional: pywebview sign-in flow
 └── legacy/gamdl_gui_ctk.py     # the original tkinter (customtkinter) version
@@ -135,7 +160,7 @@ python packaging/build.py --webview  # include the sign-in webview flow
 the sign-in button is simply hidden and manual cookie import is used, keeping
 the lite bundle smaller.  Because pywebview uses the **OS** web engine
 (WKWebView / WebView2 / WebKitGTK) instead of embedding Chromium, the cost is
-small — on macOS it measured **≈ +9 MB (137 MB → 146 MB)**, versus roughly
+small — on macOS it measured **≈ +5 MB (119 MB → 124 MB)**, versus roughly
 +200 MB for a QtWebEngine-based approach.
 
 On Windows the sign-in window relies on the **WebView2** runtime (shipped with
@@ -161,13 +186,64 @@ Notes:
 
 ### Bundle size
 
-The spec ships a custom hook (`packaging/hooks/hook-PySide6.QtGui.py`) that
-drops two Qt plugins the app never uses:
+Two things keep the download small. The spec ships a custom hook
+(`packaging/hooks/hook-PySide6.QtGui.py`) that drops two Qt plugins the app
+never uses:
 
 | Plugin | Pulls in | Saved |
 | --- | --- | --- |
 | `imageformats/libqpdf` | QtPdf | ~8 MB |
 | `platforminputcontexts/libqtvirtualkeyboardplugin` | QtVirtualKeyboard + QtQml + QtQuick | ~16 MB |
+
+…and it excludes the optional accelerators, unused integrations and transitive
+leftovers that static analysis pulls in. Each one is safe because the library
+that references it guards the import behind a `try/except ImportError` (or the
+code path is never reached at all):
+
+| Excluded | Why it is safe |
+| --- | --- |
+| `numpy` | `construct` (via gamdl) guards the import |
+| `simplejson` | `requests` falls back to the stdlib `json` |
+| `zstandard` | `httpx` / `urllib3` fall back to stdlib zlib |
+| `Cryptodome` | yt-dlp falls back to `Crypto` (kept) or its native AES |
+| `twisted`, `zope`, `automat`, `constantly`, `hyperlink`, `incremental` | only structlog's unused Twisted integration needs them |
+| `uvloop`, `tornado`, `psutil`, `yaml`, `markupsafe`, `service_identity` | never imported by the app or any of its dependencies |
+| `pytest`, `_pytest`, `pkg_resources`, `setuptools`, `wheel`, `pip` | test/packaging machinery only — see the note below |
+
+> **Why `pkg_resources` has to be excluded, not just left out.** Static analysis
+> finds a conditional `from pkg_resources import fixup_namespace_packages` inside
+> `_pytest/monkeypatch.py`, which drags `pkg_resources` into the module graph.
+> PyInstaller reacts to that module by attaching its `pyi_rth_pkgres` run-time
+> hook, and that hook imports `pkg_resources` — which since setuptools 71 runs
+> `from jaraco.text import ...`. `jaraco` only exists vendored inside
+> `setuptools/_vendor`, so the import fails and *every* frozen executable dies
+> before `main()` with `ModuleNotFoundError: No module named 'jaraco'`.
+> Excluding `pkg_resources` also drops the hook, because excluded modules are
+> `ExcludedModule` nodes and those are not part of the TOC the hook list is built
+> from.
+
+Measured on macOS arm64: the webview bundle went **146 MB → 124 MB**, and the
+lite bundle is **119 MB**.
+
+### Continuous integration & releases
+
+`.github/workflows/build.yml` builds all six bundles on the **native** runner
+for each platform — `macos-15` (arm64), `macos-15-intel` (x86_64) and
+`windows-latest` (x64), each in a `webview` and a `lite` variant. It smoke-tests
+the bundled downloader (`gamdl --version`), zips the result, and when it runs
+for a `v*` tag it publishes everything to a GitHub release along with
+`SHA256SUMS.txt`. You can also start it by hand from the **Actions** tab to get
+artifacts without publishing anything.
+
+macOS bundles are packed with `ditto` so the `.app` symlinks and signature
+survive; on Windows the `dist/Gamdl GUI` folder is zipped as-is.
+
+Releasing is therefore just:
+
+```bash
+git tag v0.6.0
+git push origin v0.6.0
+```
 
 ### Icon
 

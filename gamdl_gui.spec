@@ -68,7 +68,38 @@ if sys.platform == "darwin" and icon_mac.exists():
 elif sys.platform == "win32" and icon_win.exists():
     icon = str(icon_win)
 
-common_excludes = ["tkinter", "customtkinter", "test", "unittest", "pydoc"]
+# Modules that are never reached at run time.  Most of them are optional
+# accelerators guarded by ``try/except ImportError`` in the library that uses
+# them, so dropping them simply selects a pure-Python fallback; the rest are
+# transitive leftovers or packaging-only helpers.  Besides trimming ~15 MB this
+# also stops several single-architecture-only C extensions from being pulled
+# in (numpy, zstandard, ...).
+optional_excludes = [
+    # guarded optional accelerators -> pure-Python fallback
+    "numpy",        # construct (via gamdl) guards the import
+    "simplejson",   # requests falls back to the stdlib json module
+    "zstandard",    # httpx / urllib3 fall back to stdlib
+    "Cryptodome",   # yt-dlp falls back to Crypto (kept) or its own native AES
+    # only reachable from code paths this app never runs
+    "twisted", "automat", "constantly", "hyperlink", "incremental", "zope",
+    "uvloop", "tornado", "psutil", "yaml", "markupsafe", "service_identity",
+    # pytest is dragged in by a stray static reference inside
+    # ``_pytest.monkeypatch``; ``pkg_resources`` comes along with it and is the
+    # reason it has to go: PyInstaller reacts to that module by attaching its
+    # ``pyi_rth_pkgres`` run-time hook, which immediately imports
+    # ``pkg_resources`` -> ``jaraco.text``.  Since setuptools >= 71 only vendors
+    # jaraco inside ``setuptools/_vendor`` (excluded below as well), that import
+    # fails and every frozen executable dies on start-up with
+    # ``ModuleNotFoundError: No module named 'jaraco'``.  Excluded modules are
+    # ``ExcludedModule`` nodes, which are not part of the TOC the hook list is
+    # built from, so excluding ``pkg_resources`` drops the hook too.
+    "pytest", "_pytest", "pluggy", "iniconfig", "pkg_resources",
+    "setuptools", "wheel", "pip",
+    # packaging tools / command-line entry points we never invoke
+    "PySide6.scripts", "pywidevine.main", "pyplayready.main",
+]
+
+common_excludes = ["tkinter", "customtkinter", "test", "unittest", "pydoc"] + optional_excludes
 
 # --- the Qt GUI ------------------------------------------------------------
 gui_analysis = Analysis(  # noqa: F821
@@ -95,7 +126,7 @@ cli_analysis = Analysis(  # noqa: F821
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=["tkinter", "customtkinter", "PySide6", "pydoc"],
+    excludes=["tkinter", "customtkinter", "PySide6", "pydoc"] + optional_excludes,
     noarchive=False,
     optimize=0,
 )

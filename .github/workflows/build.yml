@@ -1,0 +1,124 @@
+name: Build
+
+# Tag a release to build every platform and attach the bundles to it:
+#     git tag v0.7.0 && git push origin v0.7.0
+# The workflow can also be started by hand from the Actions tab to produce
+# artifacts without publishing anything.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.artifact }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS arm64 (Apple silicon)
+          - { os: macos-15,       variant: webview, artifact: Gamdl-GUI-macOS-arm64 }
+          - { os: macos-15,       variant: lite,    artifact: Gamdl-GUI-macOS-arm64-lite }
+          # macOS x86_64 (Intel)
+          - { os: macos-15-intel, variant: webview, artifact: Gamdl-GUI-macOS-x86_64 }
+          - { os: macos-15-intel, variant: lite,    artifact: Gamdl-GUI-macOS-x86_64-lite }
+          # Windows x64
+          - { os: windows-latest, variant: webview, artifact: Gamdl-GUI-Windows-x64 }
+          - { os: windows-latest, variant: lite,    artifact: Gamdl-GUI-Windows-x64-lite }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pyinstaller
+          if [ "${{ matrix.variant }}" = "webview" ]; then
+            python -m pip install -r requirements-webview.txt
+          fi
+          python -c "import platform, sys; print('building with', platform.machine(), 'Python', sys.version.split()[0])"
+
+      - name: Build (${{ matrix.variant }})
+        shell: bash
+        run: |
+          if [ "${{ matrix.variant }}" = "webview" ]; then
+            python packaging/build.py --webview
+          else
+            python packaging/build.py
+          fi
+
+      # Cheap end-to-end check: the bundled downloader must start up and
+      # report the version it was frozen with.
+      - name: Smoke test (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          "dist/Gamdl GUI.app/Contents/MacOS/gamdl" --version
+          test -x "dist/Gamdl GUI.app/Contents/MacOS/Gamdl GUI"
+
+      - name: Smoke test (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          "dist/Gamdl GUI/gamdl.exe" --version
+          test -f "dist/Gamdl GUI/Gamdl GUI.exe"
+
+      # ``ditto`` preserves the symlinks and extended attributes an .app
+      # bundle needs; a plain zip would break the signature.
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent "dist/Gamdl GUI.app" "${{ matrix.artifact }}.zip"
+          du -h "${{ matrix.artifact }}.zip"
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "dist/Gamdl GUI/*" -DestinationPath "${{ matrix.artifact }}.zip"
+          Get-Item "${{ matrix.artifact }}.zip" | Select-Object Name, Length
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}.zip
+          if-no-files-found: error
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+
+      - name: Checksums
+        working-directory: assets
+        run: |
+          ls -lh
+          shasum -a 256 *.zip > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        working-directory: assets
+        run: |
+          gh release create "$TAG" --title "$TAG" --generate-notes \
+            --notes "Download the bundle for your platform below. macOS builds are ad-hoc signed, so the first launch needs a right-click → Open (see the README)." \
+            *.zip SHA256SUMS.txt \
+          || gh release upload "$TAG" --clobber *.zip SHA256SUMS.txt
