@@ -113,7 +113,8 @@ jobs:
           GH_REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
         run: |
-          notes_file=".github/release-notes/$TAG.md"
+          # Absolute, because ``gh`` below runs from inside ``assets/``.
+          notes_file="$GITHUB_WORKSPACE/.github/release-notes/$TAG.md"
           if [ -f "$notes_file" ]; then
             echo "using hand-written notes from $notes_file"
             notes=(--notes-file "$notes_file")
