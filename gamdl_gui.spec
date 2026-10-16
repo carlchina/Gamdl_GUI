@@ -11,7 +11,7 @@ set of dependencies:
 ``gamdl_gui/core/gamdl.py`` finds the bundled ``gamdl`` automatically at
 runtime.  Build with::
 
-    python packaging/build.py                 # lite build
+    python packaging/build.py                 # without the sign-in flow
     python packaging/build.py --webview       # + embedded sign-in
 
 or directly::
@@ -34,8 +34,8 @@ BUNDLE_ID = "com.carlchina.gamdlgui"
 SPEC_DIR = Path(SPECPATH).resolve()  # noqa: F821  (injected by PyInstaller)
 
 # Optional embedded sign-in (pywebview). Build with ``GAMDL_GUI_WEBVIEW=1``
-# (or ``python packaging/build.py --webview``) to include it; the default lite
-# build omits it and falls back to manual cookies.txt import.
+# (or ``python packaging/build.py --webview``) to include it; without it the
+# sign-in button is hidden and manual cookies.txt import is used.
 WITH_WEBVIEW = os.environ.get("GAMDL_GUI_WEBVIEW") == "1"
 
 # --- resources -------------------------------------------------------------

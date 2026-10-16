@@ -31,14 +31,14 @@ Gamdl GUI is a modern, user-friendly graphical interface for [gamdl](https://git
 Tagged [releases](https://github.com/carlchina/Gamdl_GUI/releases) contain
 ready-to-run bundles — no Python and no `gamdl` installation needed:
 
-| Platform | Full (embedded sign-in) | Lite (manual `cookies.txt`) |
-| --- | --- | --- |
-| macOS 11+ · Apple silicon | `Gamdl-GUI-macOS-arm64.zip` | `Gamdl-GUI-macOS-arm64-lite.zip` |
-| macOS 11+ · Intel | `Gamdl-GUI-macOS-x86_64.zip` | `Gamdl-GUI-macOS-x86_64-lite.zip` |
-| Windows 10/11 · x64 | `Gamdl-GUI-Windows-x64.zip` | `Gamdl-GUI-Windows-x64-lite.zip` |
+| Platform | Bundle |
+| --- | --- |
+| macOS 11+ · Apple silicon | `Gamdl-GUI-macOS-arm64.zip` |
+| macOS 11+ · Intel | `Gamdl-GUI-macOS-x86_64.zip` |
+| Windows 10/11 · x64 | `Gamdl-GUI-Windows-x64.zip` |
 
-Unzip it and run. The **lite** bundles leave out the embedded sign-in webview;
-use **Import cookies.txt** there instead.
+Unzip it and run — `Gamdl GUI.app` on macOS, `Gamdl GUI.exe` on Windows.
+`SHA256SUMS.txt` is published alongside the bundles.
 
 > **macOS first launch.** The bundles are ad-hoc signed only (no Apple
 > Developer ID / notarisation), so Gatekeeper refuses the first launch. Either
@@ -134,7 +134,9 @@ Gamdl_GUI/
 │   ├── icon.icns               # macOS icon
 │   └── icon.ico                # Windows icon
 ├── gamdl_gui.spec              # PyInstaller build recipe
-├── .github/workflows/build.yml # CI: builds + releases every platform
+├── .github/
+│   ├── workflows/build.yml     # CI: builds + releases every platform
+│   └── release-notes/          # per-tag release bodies (used by the CI release job)
 ├── requirements.txt            # runtime deps (PySide6 …)
 ├── requirements-webview.txt    # optional: pywebview sign-in flow
 └── legacy/gamdl_gui_ctk.py     # the original tkinter (customtkinter) version
@@ -152,16 +154,18 @@ share one set of dependencies:
 
 ```bash
 pip install pyinstaller
-python packaging/build.py            # lite build (manual cookies.txt)
-python packaging/build.py --webview  # include the sign-in webview flow
+python packaging/build.py --webview  # the released build
+python packaging/build.py            # without the sign-in webview
 ```
 
-`--webview` bundles `pywebview` plus its native dependencies. Without it
-the sign-in button is simply hidden and manual cookie import is used, keeping
-the lite bundle smaller.  Because pywebview uses the **OS** web engine
-(WKWebView / WebView2 / WebKitGTK) instead of embedding Chromium, the cost is
-small — on macOS it measured **≈ +5 MB (119 MB → 124 MB)**, versus roughly
-+200 MB for a QtWebEngine-based approach.
+`--webview` bundles `pywebview` plus its native dependencies. Because pywebview
+uses the **OS** web engine (WKWebView / WebView2 / WebKitGTK) instead of
+embedding Chromium, the cost is small — on macOS it measured **≈ +5 MB
+(119 MB → 124 MB)**, versus roughly +200 MB for a QtWebEngine-based approach.
+Dropping it is not worth a separate download, so the released bundles always
+include it; plain `packaging/build.py` remains useful if you would rather not
+have `pywebview` at all, in which case the sign-in button is hidden and
+**Import cookies.txt** is used instead.
 
 On Windows the sign-in window relies on the **WebView2** runtime (shipped with
 Windows 10/11 and Microsoft Edge), so nothing extra needs bundling there
@@ -222,18 +226,21 @@ code path is never reached at all):
 > `ExcludedModule` nodes and those are not part of the TOC the hook list is built
 > from.
 
-Measured on macOS arm64: the webview bundle went **146 MB → 124 MB**, and the
-lite bundle is **119 MB**.
+Measured on macOS arm64: the bundle went **146 MB → 124 MB**.
 
 ### Continuous integration & releases
 
-`.github/workflows/build.yml` builds all six bundles on the **native** runner
+`.github/workflows/build.yml` builds all three bundles on the **native** runner
 for each platform — `macos-15` (arm64), `macos-15-intel` (x86_64) and
-`windows-latest` (x64), each in a `webview` and a `lite` variant. It smoke-tests
-the bundled downloader (`gamdl --version`), zips the result, and when it runs
-for a `v*` tag it publishes everything to a GitHub release along with
-`SHA256SUMS.txt`. You can also start it by hand from the **Actions** tab to get
-artifacts without publishing anything.
+`windows-latest` (x64). It smoke-tests the bundled downloader
+(`gamdl --version`), zips the result, and when it runs for a `v*` tag it
+publishes everything to a GitHub release along with `SHA256SUMS.txt`. You can
+also start it by hand from the **Actions** tab to get artifacts without
+publishing anything.
+
+Release notes live in `.github/release-notes/<tag>.md` and are used as the
+release body when the file exists (otherwise GitHub's generated notes are
+used), so the notes for a version are part of the repository.
 
 macOS bundles are packed with `ditto` so the `.app` symlinks and signature
 survive; on Windows the `dist/Gamdl GUI` folder is zipped as-is.

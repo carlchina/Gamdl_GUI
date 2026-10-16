@@ -3,7 +3,7 @@
 
 Usage::
 
-    python packaging/build.py                 # lite build (manual cookies.txt)
+    python packaging/build.py                 # without the sign-in webview flow
     python packaging/build.py --webview       # include the sign-in webview flow
     python packaging/build.py --noconfirm ... # extra args pass through to PyInstaller
 
@@ -37,7 +37,7 @@ def main(argv: list[str]) -> int:
 
     env = os.environ.copy()
     env["GAMDL_GUI_WEBVIEW"] = "1" if with_webview else "0"
-    print(f">> webview sign-in: {'on' if with_webview else 'off (lite build)'}")
+    print(f">> webview sign-in: {'on' if with_webview else 'off'}")
 
     cmd = [sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", *passthrough, str(spec)]
     print(">>", " ".join(cmd))

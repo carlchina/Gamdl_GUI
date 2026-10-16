@@ -1,9 +1,12 @@
 name: Build
 
 # Tag a release to build every platform and attach the bundles to it:
-#     git tag v0.7.0 && git push origin v0.7.0
+#     git tag v1.0.1 && git push origin v1.0.1
 # The workflow can also be started by hand from the Actions tab to produce
 # artifacts without publishing anything.
+#
+# Release notes: if ``.github/release-notes/<tag>.md`` exists it is used as the
+# release body, otherwise GitHub's generated notes are used.
 
 on:
   push:
@@ -22,14 +25,11 @@ jobs:
       matrix:
         include:
           # macOS arm64 (Apple silicon)
-          - { os: macos-15,       variant: webview, artifact: Gamdl-GUI-macOS-arm64 }
-          - { os: macos-15,       variant: lite,    artifact: Gamdl-GUI-macOS-arm64-lite }
+          - { os: macos-15,       artifact: Gamdl-GUI-macOS-arm64 }
           # macOS x86_64 (Intel)
-          - { os: macos-15-intel, variant: webview, artifact: Gamdl-GUI-macOS-x86_64 }
-          - { os: macos-15-intel, variant: lite,    artifact: Gamdl-GUI-macOS-x86_64-lite }
+          - { os: macos-15-intel, artifact: Gamdl-GUI-macOS-x86_64 }
           # Windows x64
-          - { os: windows-latest, variant: webview, artifact: Gamdl-GUI-Windows-x64 }
-          - { os: windows-latest, variant: lite,    artifact: Gamdl-GUI-Windows-x64-lite }
+          - { os: windows-latest, artifact: Gamdl-GUI-Windows-x64 }
     steps:
       - uses: actions/checkout@v7
 
@@ -39,26 +39,17 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        shell: bash
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt pyinstaller
-          if [ "${{ matrix.variant }}" = "webview" ]; then
-            python -m pip install -r requirements-webview.txt
-          fi
+          python -m pip install -r requirements.txt -r requirements-webview.txt pyinstaller
           python -c "import platform, sys; print('building with', platform.machine(), 'Python', sys.version.split()[0])"
 
-      - name: Build (${{ matrix.variant }})
-        shell: bash
-        run: |
-          if [ "${{ matrix.variant }}" = "webview" ]; then
-            python packaging/build.py --webview
-          else
-            python packaging/build.py
-          fi
+      - name: Build
+        run: python packaging/build.py --webview
 
-      # Cheap end-to-end check: the bundled downloader must start up and
-      # report the version it was frozen with.
+      # Cheap end-to-end check: the bundled downloader must start up and report
+      # the version it was frozen with.  This is what catches missing modules
+      # that only fail at run time.
       - name: Smoke test (macOS)
         if: runner.os == 'macOS'
         run: |
@@ -67,13 +58,13 @@ jobs:
 
       - name: Smoke test (Windows)
         if: runner.os == 'Windows'
-        shell: bash
+        shell: pwsh
         run: |
-          "dist/Gamdl GUI/gamdl.exe" --version
-          test -f "dist/Gamdl GUI/Gamdl GUI.exe"
+          & "dist/Gamdl GUI/gamdl.exe" --version
+          if (-not (Test-Path "dist/Gamdl GUI/Gamdl GUI.exe")) { throw "GUI executable missing" }
 
-      # ``ditto`` preserves the symlinks and extended attributes an .app
-      # bundle needs; a plain zip would break the signature.
+      # ``ditto`` preserves the symlinks and extended attributes an .app bundle
+      # needs; a plain zip would break the signature.
       - name: Package (macOS)
         if: runner.os == 'macOS'
         run: |
@@ -100,6 +91,8 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v7
+
       - uses: actions/download-artifact@v8
         with:
           path: assets
@@ -119,9 +112,16 @@ jobs:
           # be told which repository to publish to.
           GH_REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
-        working-directory: assets
         run: |
-          gh release create "$TAG" --title "$TAG" --generate-notes \
-            --notes "Download the bundle for your platform below. macOS builds are ad-hoc signed, so the first launch needs a right-click → Open (see the README)." \
-            *.zip SHA256SUMS.txt \
-          || gh release upload "$TAG" --clobber *.zip SHA256SUMS.txt
+          notes_file=".github/release-notes/$TAG.md"
+          if [ -f "$notes_file" ]; then
+            echo "using hand-written notes from $notes_file"
+            notes=(--notes-file "$notes_file")
+          else
+            echo "no $notes_file, falling back to generated notes"
+            notes=(--generate-notes --notes "macOS builds are ad-hoc signed, so the first launch needs a right-click → Open.")
+          fi
+
+          (cd assets && gh release create "$TAG" --title "$TAG" --verify-tag \
+            "${notes[@]}" *.zip SHA256SUMS.txt) \
+          || (cd assets && gh release upload "$TAG" --clobber *.zip SHA256SUMS.txt)
