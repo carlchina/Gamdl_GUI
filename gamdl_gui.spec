@@ -27,7 +27,7 @@ import os
 import sys
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, collect_submodules
 
 APP_NAME = "Gamdl GUI"
 BUNDLE_ID = "com.carlchina.gamdlgui"
@@ -42,6 +42,10 @@ WITH_WEBVIEW = os.environ.get("GAMDL_GUI_WEBVIEW") == "1"
 datas = [(str(SPEC_DIR / "langs"), "langs")]
 
 gamdl_hidden = collect_submodules("gamdl")
+# gamdl 3.x ships a compiled Rust muxer/decryptor (``gamdl/_ammuxer.abi3.so``).
+# It is picked up through ``collect_submodules`` too, but collecting the shared
+# library explicitly guarantees it lands in the bundle.
+gamdl_binaries = collect_dynamic_libs("gamdl")
 
 webview_hidden = []
 webview_excludes = ["webview", "qtpy", "PyQt5", "PyQt6", "PySide2"]
@@ -85,7 +89,7 @@ gui_analysis = Analysis(  # noqa: F821
 cli_analysis = Analysis(  # noqa: F821
     [str(SPEC_DIR / "packaging" / "gamdl_cli.py")],
     pathex=[str(SPEC_DIR)],
-    binaries=[],
+    binaries=gamdl_binaries,
     datas=[],
     hiddenimports=gamdl_hidden,
     hookspath=[],

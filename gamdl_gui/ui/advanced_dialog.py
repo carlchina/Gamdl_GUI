@@ -1,9 +1,9 @@
 """Modal dialog exposing the more advanced gamdl options.
 
 These are the flags gamdl gained over time that the original GUI never
-surfaced: ALAC/lossless codec priority, metadata language, cover/playlist
-options, lyrics formats, music-video settings, the wrapper decryptor and the
-external tool paths.
+surfaced: codec priority, metadata language, cover/playlist options, lyrics
+formats, music-video settings, the gamdl 3.x naming templates, the DRM
+backends, the wrapper decryptor and the external tool paths.
 """
 
 from __future__ import annotations
@@ -29,9 +29,10 @@ from PySide6.QtWidgets import (
 from ..core.settings import Settings
 from ..services.i18n import Translator
 
+# Values taken from gamdl 3.9.1 (gamdl.interface.enums / gamdl.downloader.enums).
 SONG_CODECS = [
-    "aac-legacy",
-    "aac-he-legacy",
+    "aac-web",
+    "aac-he-web",
     "aac",
     "aac-he",
     "aac-binaural",
@@ -46,10 +47,10 @@ SONG_CODECS = [
 LYRICS_FORMATS = ["lrc", "srt", "ttml"]
 COVER_FORMATS = ["jpg", "png", "raw"]
 MV_CODECS = ["h264,h265", "h265,h264", "h264", "h265", "ask"]
-REMUX_MODES = ["ffmpeg", "mp4box"]
 REMUX_FORMATS = ["m4v", "mp4"]
 RESOLUTIONS = ["240p", "360p", "480p", "540p", "720p", "1080p", "1440p", "2160p"]
 UPLOADED_QUALITIES = ["best", "ask"]
+DRM_BACKENDS = ["widevine", "playready"]
 ARTIST_SELECTS = [
     "",
     "main-albums",
@@ -69,7 +70,7 @@ class AdvancedDialog(QDialog):
         self._s = settings
         self._tr = tr
         self.setWindowTitle(tr.tr("advanced_title"))
-        self.resize(680, 760)
+        self.resize(720, 800)
 
         outer = QVBoxLayout(self)
         scroll = QScrollArea(self)
@@ -86,6 +87,8 @@ class AdvancedDialog(QDialog):
         self._build_cover(layout)
         self._build_song(layout)
         self._build_video(layout)
+        self._build_naming(layout)
+        self._build_drm(layout)
         self._build_paths(layout)
         self._build_wrapper(layout)
         layout.addStretch(1)
@@ -120,20 +123,24 @@ class AdvancedDialog(QDialog):
         combo.setCurrentIndex(idx if idx >= 0 else 0)
         return combo
 
-    def _path_row(self, line: QLineEdit, directory: bool, title_key: str) -> QWidget:
+    def _path_row(
+        self, line: QLineEdit, directory: bool, title_key: str, save: bool = False
+    ) -> QWidget:
         row = QWidget()
         h = QHBoxLayout(row)
         h.setContentsMargins(0, 0, 0, 0)
         h.addWidget(line, 1)
         btn = QPushButton(self._tr.tr("browse_btn"))
         btn.setFixedWidth(80)
-        btn.clicked.connect(lambda: self._browse(line, directory, title_key))
+        btn.clicked.connect(lambda: self._browse(line, directory, title_key, save))
         h.addWidget(btn)
         return row
 
-    def _browse(self, line: QLineEdit, directory: bool, title_key: str) -> None:
+    def _browse(self, line: QLineEdit, directory: bool, title_key: str, save: bool) -> None:
         if directory:
             path = QFileDialog.getExistingDirectory(self, self._tr.tr(title_key), line.text())
+        elif save:
+            path, _ = QFileDialog.getSaveFileName(self, self._tr.tr(title_key), line.text())
         else:
             path, _ = QFileDialog.getOpenFileName(self, self._tr.tr(title_key), line.text())
         if path:
@@ -148,13 +155,17 @@ class AdvancedDialog(QDialog):
         self.artist_auto = self._combo(ARTIST_SELECTS, self._s.artist_auto_select)
         form.addRow(self._tr.tr("artist_auto_select_label"), self.artist_auto)
 
+        self.date_tag_template = QLineEdit(self._s.date_tag_template)
+        self.date_tag_template.setPlaceholderText("YYYY-MM-DD")
+        form.addRow(self._tr.tr("date_tag_template_label"), self.date_tag_template)
+
         self.use_album_date = QCheckBox(self._tr.tr("use_album_date_cb"))
         self.use_album_date.setChecked(self._s.use_album_date)
         form.addRow("", self.use_album_date)
 
-        self.fetch_extra_tags = QCheckBox(self._tr.tr("fetch_extra_tags_cb"))
-        self.fetch_extra_tags.setChecked(self._s.fetch_extra_tags)
-        form.addRow("", self.fetch_extra_tags)
+        self.no_exceptions = QCheckBox(self._tr.tr("no_exceptions_cb"))
+        self.no_exceptions.setChecked(self._s.no_exceptions)
+        form.addRow("", self.no_exceptions)
 
     def _build_cover(self, layout: QVBoxLayout) -> None:
         form = self._group("group_cover", layout)
@@ -196,14 +207,56 @@ class AdvancedDialog(QDialog):
         self.mv_resolution = self._combo(RESOLUTIONS, self._s.mv_resolution)
         form.addRow(self._tr.tr("mv_resolution_label"), self.mv_resolution)
 
-        self.mv_remux_mode = self._combo(REMUX_MODES, self._s.mv_remux_mode)
-        form.addRow(self._tr.tr("mv_remux_mode_label"), self.mv_remux_mode)
-
         self.mv_remux_format = self._combo(REMUX_FORMATS, self._s.mv_remux_format)
         form.addRow(self._tr.tr("mv_remux_format_label"), self.mv_remux_format)
 
         self.uploaded_quality = self._combo(UPLOADED_QUALITIES, self._s.uploaded_video_quality)
         form.addRow(self._tr.tr("uploaded_quality_label"), self.uploaded_quality)
+
+    def _build_naming(self, layout: QVBoxLayout) -> None:
+        form = self._group("group_naming", layout)
+        self.album_folder_template = QLineEdit(self._s.album_folder_template)
+        form.addRow(self._tr.tr("album_folder_template_label"), self.album_folder_template)
+
+        self.compilation_folder_template = QLineEdit(self._s.compilation_folder_template)
+        form.addRow(
+            self._tr.tr("compilation_folder_template_label"), self.compilation_folder_template
+        )
+
+        self.no_album_folder_template = QLineEdit(self._s.no_album_folder_template)
+        form.addRow(
+            self._tr.tr("no_album_folder_template_label"), self.no_album_folder_template
+        )
+
+        self.playlist_folder_template = QLineEdit(self._s.playlist_folder_template)
+        form.addRow(self._tr.tr("playlist_folder_template_label"), self.playlist_folder_template)
+
+        self.single_disc_file_template = QLineEdit(self._s.single_disc_file_template)
+        form.addRow(
+            self._tr.tr("single_disc_file_template_label"), self.single_disc_file_template
+        )
+
+        self.multi_disc_file_template = QLineEdit(self._s.multi_disc_file_template)
+        form.addRow(
+            self._tr.tr("multi_disc_file_template_label"), self.multi_disc_file_template
+        )
+
+        self.no_album_file_template = QLineEdit(self._s.no_album_file_template)
+        form.addRow(self._tr.tr("no_album_file_template_label"), self.no_album_file_template)
+
+        self.playlist_file_template = QLineEdit(self._s.playlist_file_template)
+        form.addRow(self._tr.tr("playlist_file_template_label"), self.playlist_file_template)
+
+    def _build_drm(self, layout: QVBoxLayout) -> None:
+        form = self._group("group_drm", layout)
+        self.drm_backend = self._combo(DRM_BACKENDS, self._s.drm_backend)
+        form.addRow(self._tr.tr("drm_backend_label"), self.drm_backend)
+
+        self.wvd_path = QLineEdit(self._s.wvd_path)
+        form.addRow(self._tr.tr("wvd_path_label"), self._path_row(self.wvd_path, False, "select_file_title"))
+
+        self.prd_path = QLineEdit(self._s.prd_path)
+        form.addRow(self._tr.tr("prd_path_label"), self._path_row(self.prd_path, False, "select_file_title"))
 
     def _build_paths(self, layout: QVBoxLayout) -> None:
         form = self._group("group_paths", layout)
@@ -216,22 +269,14 @@ class AdvancedDialog(QDialog):
         form.addRow(self._tr.tr("temp_path_label"), self._path_row(self.temp_path, True, "select_dir_title"))
 
         self.log_file = QLineEdit(self._s.log_file)
-        form.addRow(self._tr.tr("log_file_label"), self._path_row(self.log_file, False, "select_file_title"))
+        form.addRow(self._tr.tr("log_file_label"), self._path_row(self.log_file, False, "select_save_title", True))
 
-        self.wvd_path = QLineEdit(self._s.wvd_path)
-        form.addRow(self._tr.tr("wvd_path_label"), self._path_row(self.wvd_path, True, "select_dir_title"))
+        self.database_path = QLineEdit(self._s.database_path)
+        form.addRow(self._tr.tr("database_path_label"), self._path_row(self.database_path, False, "select_save_title", True))
 
         self.ffmpeg_path = QLineEdit(self._s.ffmpeg_path)
         self.ffmpeg_path.setPlaceholderText("ffmpeg")
         form.addRow(self._tr.tr("ffmpeg_path_label"), self.ffmpeg_path)
-
-        self.mp4decrypt_path = QLineEdit(self._s.mp4decrypt_path)
-        self.mp4decrypt_path.setPlaceholderText("mp4decrypt")
-        form.addRow(self._tr.tr("mp4decrypt_path_label"), self.mp4decrypt_path)
-
-        self.mp4box_path = QLineEdit(self._s.mp4box_path)
-        self.mp4box_path.setPlaceholderText("MP4Box")
-        form.addRow(self._tr.tr("mp4box_path_label"), self.mp4box_path)
 
         self.nm3u8dlre_path = QLineEdit(self._s.nm3u8dlre_path)
         self.nm3u8dlre_path.setPlaceholderText("N_m3u8DL-RE")
@@ -243,21 +288,26 @@ class AdvancedDialog(QDialog):
         self.use_wrapper.setChecked(self._s.use_wrapper)
         form.addRow("", self.use_wrapper)
 
-        self.wrapper_account_url = QLineEdit(self._s.wrapper_account_url)
-        self.wrapper_account_url.setPlaceholderText("http://127.0.0.1:30020/")
-        form.addRow(self._tr.tr("wrapper_account_url_label"), self.wrapper_account_url)
+        self.wrapper_url = QLineEdit(self._s.wrapper_url)
+        self.wrapper_url.setPlaceholderText("http://127.0.0.1")
+        form.addRow(self._tr.tr("wrapper_url_label"), self.wrapper_url)
 
-        self.wrapper_decrypt_ip = QLineEdit(self._s.wrapper_decrypt_ip)
-        self.wrapper_decrypt_ip.setPlaceholderText("127.0.0.1:10020")
-        form.addRow(self._tr.tr("wrapper_decrypt_ip_label"), self.wrapper_decrypt_ip)
+        self.wrapper_decrypt_host = QLineEdit(self._s.wrapper_decrypt_host)
+        self.wrapper_decrypt_host.setPlaceholderText("127.0.0.1")
+        form.addRow(self._tr.tr("wrapper_decrypt_host_label"), self.wrapper_decrypt_host)
+
+        self.wrapper_decrypt_port = QLineEdit(self._s.wrapper_decrypt_port)
+        self.wrapper_decrypt_port.setPlaceholderText("10020")
+        form.addRow(self._tr.tr("wrapper_decrypt_port_label"), self.wrapper_decrypt_port)
 
     # -- actions --------------------------------------------------------
     def _on_accept(self) -> None:
         s = self._s
         s.language = self.lang.currentText().strip() or "en-US"
         s.artist_auto_select = self.artist_auto.currentText().strip()
+        s.date_tag_template = self.date_tag_template.text().strip()
         s.use_album_date = self.use_album_date.isChecked()
-        s.fetch_extra_tags = self.fetch_extra_tags.isChecked()
+        s.no_exceptions = self.no_exceptions.isChecked()
 
         s.cover_format = self.cover_format.currentText()
         s.cover_size = self.cover_size.value()
@@ -270,30 +320,42 @@ class AdvancedDialog(QDialog):
 
         s.mv_codec_priority = self.mv_codec.currentText()
         s.mv_resolution = self.mv_resolution.currentText()
-        s.mv_remux_mode = self.mv_remux_mode.currentText()
         s.mv_remux_format = self.mv_remux_format.currentText()
         s.uploaded_video_quality = self.uploaded_quality.currentText()
 
+        s.album_folder_template = self.album_folder_template.text().strip()
+        s.compilation_folder_template = self.compilation_folder_template.text().strip()
+        s.no_album_folder_template = self.no_album_folder_template.text().strip()
+        s.playlist_folder_template = self.playlist_folder_template.text().strip()
+        s.single_disc_file_template = self.single_disc_file_template.text().strip()
+        s.multi_disc_file_template = self.multi_disc_file_template.text().strip()
+        s.no_album_file_template = self.no_album_file_template.text().strip()
+        s.playlist_file_template = self.playlist_file_template.text().strip()
+
+        s.drm_backend = self.drm_backend.currentText()
+        s.wvd_path = self.wvd_path.text().strip()
+        s.prd_path = self.prd_path.text().strip()
+
         s.temp_path = self.temp_path.text().strip()
         s.log_file = self.log_file.text().strip()
+        s.database_path = self.database_path.text().strip()
         s.gamdl_path = self.gamdl_path.text().strip()
-        s.wvd_path = self.wvd_path.text().strip()
         s.ffmpeg_path = self.ffmpeg_path.text().strip()
-        s.mp4decrypt_path = self.mp4decrypt_path.text().strip()
-        s.mp4box_path = self.mp4box_path.text().strip()
         s.nm3u8dlre_path = self.nm3u8dlre_path.text().strip()
 
         s.use_wrapper = self.use_wrapper.isChecked()
-        s.wrapper_account_url = self.wrapper_account_url.text().strip()
-        s.wrapper_decrypt_ip = self.wrapper_decrypt_ip.text().strip()
+        s.wrapper_url = self.wrapper_url.text().strip()
+        s.wrapper_decrypt_host = self.wrapper_decrypt_host.text().strip()
+        s.wrapper_decrypt_port = self.wrapper_decrypt_port.text().strip()
         self.accept()
 
     def _on_reset(self) -> None:
         defaults = Settings()
         self.lang.setCurrentText(defaults.language)
         self.artist_auto.setCurrentText(defaults.artist_auto_select)
+        self.date_tag_template.setText(defaults.date_tag_template)
         self.use_album_date.setChecked(defaults.use_album_date)
-        self.fetch_extra_tags.setChecked(defaults.fetch_extra_tags)
+        self.no_exceptions.setChecked(defaults.no_exceptions)
         self.cover_format.setCurrentText(defaults.cover_format)
         self.cover_size.setValue(defaults.cover_size)
         self.truncate.setValue(defaults.truncate)
@@ -303,17 +365,26 @@ class AdvancedDialog(QDialog):
         self.lyrics_only.setChecked(defaults.synced_lyrics_only)
         self.mv_codec.setCurrentText(defaults.mv_codec_priority)
         self.mv_resolution.setCurrentText(defaults.mv_resolution)
-        self.mv_remux_mode.setCurrentText(defaults.mv_remux_mode)
         self.mv_remux_format.setCurrentText(defaults.mv_remux_format)
         self.uploaded_quality.setCurrentText(defaults.uploaded_video_quality)
+        self.album_folder_template.setText(defaults.album_folder_template)
+        self.compilation_folder_template.setText(defaults.compilation_folder_template)
+        self.no_album_folder_template.setText(defaults.no_album_folder_template)
+        self.playlist_folder_template.setText(defaults.playlist_folder_template)
+        self.single_disc_file_template.setText(defaults.single_disc_file_template)
+        self.multi_disc_file_template.setText(defaults.multi_disc_file_template)
+        self.no_album_file_template.setText(defaults.no_album_file_template)
+        self.playlist_file_template.setText(defaults.playlist_file_template)
+        self.drm_backend.setCurrentText(defaults.drm_backend)
+        self.wvd_path.setText(defaults.wvd_path)
+        self.prd_path.setText(defaults.prd_path)
         self.temp_path.setText(defaults.temp_path)
         self.log_file.setText(defaults.log_file)
+        self.database_path.setText(defaults.database_path)
         self.gamdl_path.setText(defaults.gamdl_path)
-        self.wvd_path.setText(defaults.wvd_path)
         self.ffmpeg_path.setText(defaults.ffmpeg_path)
-        self.mp4decrypt_path.setText(defaults.mp4decrypt_path)
-        self.mp4box_path.setText(defaults.mp4box_path)
         self.nm3u8dlre_path.setText(defaults.nm3u8dlre_path)
         self.use_wrapper.setChecked(defaults.use_wrapper)
-        self.wrapper_account_url.setText(defaults.wrapper_account_url)
-        self.wrapper_decrypt_ip.setText(defaults.wrapper_decrypt_ip)
+        self.wrapper_url.setText(defaults.wrapper_url)
+        self.wrapper_decrypt_host.setText(defaults.wrapper_decrypt_host)
+        self.wrapper_decrypt_port.setText(defaults.wrapper_decrypt_port)

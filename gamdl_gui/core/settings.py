@@ -72,8 +72,9 @@ class Settings:
     # ``language`` is gamdl's *metadata* language (-l), not the UI language.
     language: str = "en-US"
     use_album_date: bool = False
-    fetch_extra_tags: bool = False
-    artist_auto_select: str = ""
+    artist_auto_select: str = ""  # empty == gamdl default
+    date_tag_template: str = ""
+    no_exceptions: bool = False
 
     # --- songs ---------------------------------------------------------
     save_cover: bool = True
@@ -81,7 +82,7 @@ class Settings:
     cover_format: str = "jpg"
     cover_size: int = 1200
     truncate: int = 0  # 0 == unset
-    song_codec_priority: str = "aac-legacy"
+    song_codec_priority: str = "aac-web"
     exclude_tags: str = ""
     synced_lyrics: bool = True
     synced_lyrics_format: str = "lrc"
@@ -89,21 +90,34 @@ class Settings:
 
     # --- music videos --------------------------------------------------
     mv_codec_priority: str = "h264,h265"
-    mv_remux_mode: str = "ffmpeg"
     mv_remux_format: str = "m4v"
     mv_resolution: str = "1080p"
     uploaded_video_quality: str = "best"
 
+    # --- naming templates (gamdl 3.x; empty == gamdl default) ----------
+    album_folder_template: str = ""
+    compilation_folder_template: str = ""
+    no_album_folder_template: str = ""
+    playlist_folder_template: str = ""
+    single_disc_file_template: str = ""
+    multi_disc_file_template: str = ""
+    no_album_file_template: str = ""
+    playlist_file_template: str = ""
+
+    # --- DRM (gamdl 3.x) ------------------------------------------------
+    drm_backend: str = "widevine"
+    wvd_path: str = ""
+    prd_path: str = ""
+
     # --- external tools / wrapper -------------------------------------
     gamdl_path: str = ""  # empty == auto-detect (bundled / PATH)
     ffmpeg_path: str = ""
-    mp4decrypt_path: str = ""
-    mp4box_path: str = ""
     nm3u8dlre_path: str = ""
-    wvd_path: str = ""
+    database_path: str = ""
     use_wrapper: bool = False
-    wrapper_account_url: str = ""
-    wrapper_decrypt_ip: str = ""
+    wrapper_url: str = ""
+    wrapper_decrypt_host: str = ""
+    wrapper_decrypt_port: str = ""
 
     # ------------------------------------------------------------------
     @classmethod
@@ -127,6 +141,24 @@ class Settings:
             else:
                 # Not a known UI code -> probably already a metadata language.
                 data["language"] = legacy
+
+        # gamdl 3.x renamed/removed a few of the options the GUI used to store.
+        # Migrate the old keys so an existing config.json keeps working.
+        if "wrapper_account_url" in data and "wrapper_url" not in data:
+            data["wrapper_url"] = data.pop("wrapper_account_url")
+        else:
+            data.pop("wrapper_account_url", None)
+        decrypt_ip = data.pop("wrapper_decrypt_ip", None)
+        if decrypt_ip and "wrapper_decrypt_host" not in data:
+            host, _, port = str(decrypt_ip).partition(":")
+            data["wrapper_decrypt_host"] = host
+            if port:
+                data["wrapper_decrypt_port"] = port
+
+        # gamdl 3.x renamed the legacy AAC codecs (``aac-legacy`` -> ``aac-web``).
+        codec = data.get("song_codec_priority")
+        if isinstance(codec, str) and codec.endswith("-legacy"):
+            data["song_codec_priority"] = codec[: -len("-legacy")] + "-web"
 
         known = {f.name for f in fields(cls)}
         data = {k: v for k, v in data.items() if k in known}

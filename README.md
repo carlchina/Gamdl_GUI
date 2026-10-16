@@ -11,26 +11,29 @@ Gamdl GUI is a modern, user-friendly graphical interface for [gamdl](https://git
 - **Easy cookie management**: sign in to Apple Music in a built-in webview and the app captures the required cookie automatically — or import a `cookies.txt` manually (the previous file is backed up).
 - **Batch downloading**: paste multiple Apple Music URLs (songs, albums, playlists, stations, artists, videos) and download them all at once.
 - **Real-time console**: gamdl's coloured log is rendered inline, with a reliable progress bar and current-track label.
-- **Full gamdl option coverage**:
+- **Full gamdl option coverage** (gamdl **3.x**):
   - Download mode (`ytdlp` / `nm3u8dlre`) and log level.
   - **Song codec priority** — `alac` for lossless, or the various AAC/Atmos/AC3 codecs.
-  - Metadata **language**, album-release-date tagging, extra tags, artist auto-select.
+  - Metadata **language**, album-release-date tagging, date-tag template, artist auto-select.
   - Cover image options (format / size), M3U8 playlist export, filename truncation, tag exclusion.
   - Synced-lyrics format (`lrc`/`srt`/`ttml`) and lyrics-only mode.
-  - Music-video resolution / codec / remux mode & format, post-video quality.
-  - Temp directory, log file and all external tool paths (ffmpeg, mp4decrypt, MP4Box, N_m3u8DL-RE).
-  - **Wrapper decryption** settings (`--use-wrapper`, account URL, decrypt IP).
+  - Music-video resolution / codec / remux format, post-video quality.
+  - **Folder & file naming templates** (album, compilation, playlist, single/multi-disc, …).
+  - **DRM backend** (`widevine` / `playready`) with `.wvd` / `.prd` device files.
+  - Download database (SQLite) for tracking downloaded media.
+  - Temp directory, log file and external tool paths (ffmpeg, N_m3u8DL-RE).
+  - **Wrapper decryption** settings (`--use-wrapper`, URL, decrypt host/port).
 - **Remembers everything**: output directory, log level, download mode, checkboxes, language, theme and window size are saved to `config.json`.
 - **Multi-language UI**: English / 中文, switchable on the fly.
 
 ## Prerequisites
 
 1. **Python 3.10** or higher (gamdl itself requires ≥ 3.10).
-2. **gamdl** — the core downloader:
+2. **gamdl 3.9 or newer** — the core downloader:
    ```bash
-   pip install gamdl
+   pip install -U gamdl
    ```
-   *Note: `gamdl` needs additional tools such as `ffmpeg` (and `mp4decrypt` / `MP4Box` / `N_m3u8DL-RE` for some modes). See the [gamdl documentation](https://github.com/glomatico/gamdl) for full setup instructions.*
+   *Note: gamdl 3.x muxes and decrypts internally with a bundled Rust engine, so `MP4Box` / `mp4decrypt` are **no longer needed**. Only the optional [`N_m3u8DL-RE`](https://github.com/nilaoda/N_m3u8DL-RE) download mode additionally needs `ffmpeg`. See the [gamdl documentation](https://github.com/glomatico/gamdl) for details.*
 
 ## Installation
 
@@ -144,12 +147,17 @@ Notes:
 - macOS output: `dist/Gamdl GUI.app` (double-clickable).
 - Windows output: `dist/Gamdl GUI/Gamdl GUI.exe` (the bundled `gamdl.exe` sits
   beside it; a console window is suppressed when it runs).
-- External tools that gamdl shells out to — `ffmpeg`, `mp4decrypt`, `MP4Box`,
-  `N_m3u8DL-RE` — are **not** statically linked; install them on the target
-  machine (or point to them in **Advanced Settings → Paths & Tools**).
+- External tools — gamdl 3.x bundles its own Rust muxer/decryptor, so
+  `MP4Box` / `mp4decrypt` are no longer required. Only `ffmpeg` (for the
+  `nm3u8dlre` download mode) and optionally `N_m3u8DL-RE` need to be available;
+  point to them in **Advanced Settings → Paths & Tools** if they are not on
+  `PATH`.
 - If you prefer to use a `gamdl` you installed yourself (different version /
   venv), set its path under **Advanced Settings → Paths & Tools → gamdl
   Executable**; that always takes priority over the bundled one.
+- The GUI always launches gamdl with `--no-config-file`, because every option
+  is owned by the GUI (`config.json` / Advanced Settings) and should never be
+  overridden by a stray `~/.gamdl/config.ini`.
 
 ### Bundle size
 

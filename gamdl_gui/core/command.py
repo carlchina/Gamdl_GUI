@@ -44,6 +44,12 @@ def build_command(
     _append_path(cmd, "-o", s.output_path)
     _append_path(cmd, "--temp-path", s.temp_path)
     _append_path(cmd, "--log-file", s.log_file)
+    _append_path(cmd, "--database-path", s.database_path)
+    # gamdl 3.x reads ``~/.gamdl/config.ini`` by default; the GUI is the
+    # single source of truth for every option, so opt out of that file.
+    cmd.append("--no-config-file")
+    if s.no_exceptions:
+        cmd.append("--no-exceptions")
 
     # --- logging -------------------------------------------------------
     cmd.extend(["--log-level", s.log_level])
@@ -59,9 +65,8 @@ def build_command(
     _append_path(cmd, "-l", s.language)
     if s.use_album_date:
         cmd.append("--use-album-date")
-    if s.fetch_extra_tags:
-        cmd.append("--fetch-extra-tags")
     _append_path(cmd, "--artist-auto-select", s.artist_auto_select)
+    _append_path(cmd, "--date-tag-template", s.date_tag_template)
 
     # --- cover / playlist ---------------------------------------------
     if s.save_cover:
@@ -75,6 +80,16 @@ def build_command(
         cmd.extend(["--truncate", str(s.truncate)])
     _append_path(cmd, "--exclude-tags", s.exclude_tags)
 
+    # --- naming templates (gamdl 3.x) ---------------------------------
+    _append_path(cmd, "--album-folder-template", s.album_folder_template)
+    _append_path(cmd, "--compilation-folder-template", s.compilation_folder_template)
+    _append_path(cmd, "--no-album-folder-template", s.no_album_folder_template)
+    _append_path(cmd, "--playlist-folder-template", s.playlist_folder_template)
+    _append_path(cmd, "--single-disc-file-template", s.single_disc_file_template)
+    _append_path(cmd, "--multi-disc-file-template", s.multi_disc_file_template)
+    _append_path(cmd, "--no-album-file-template", s.no_album_file_template)
+    _append_path(cmd, "--playlist-file-template", s.playlist_file_template)
+
     # --- songs / lyrics ------------------------------------------------
     _append_path(cmd, "--song-codec-priority", s.song_codec_priority)
     _append_path(cmd, "--synced-lyrics-format", s.synced_lyrics_format)
@@ -85,23 +100,25 @@ def build_command(
 
     # --- music videos ---------------------------------------------------
     _append_path(cmd, "--music-video-codec-priority", s.mv_codec_priority)
-    _append_path(cmd, "--music-video-remux-mode", s.mv_remux_mode)
     _append_path(cmd, "--music-video-remux-format", s.mv_remux_format)
     _append_path(cmd, "--music-video-resolution", s.mv_resolution)
     _append_path(cmd, "--uploaded-video-quality", s.uploaded_video_quality)
 
+    # --- DRM (gamdl 3.x) ------------------------------------------------
+    _append_path(cmd, "--drm-backend", s.drm_backend)
+    _append_path(cmd, "--wvd-path", s.wvd_path)
+    _append_path(cmd, "--prd-path", s.prd_path)
+
     # --- external tools -------------------------------------------------
     _append_path(cmd, "--ffmpeg-path", s.ffmpeg_path)
-    _append_path(cmd, "--mp4decrypt-path", s.mp4decrypt_path)
-    _append_path(cmd, "--mp4box-path", s.mp4box_path)
     _append_path(cmd, "--nm3u8dlre-path", s.nm3u8dlre_path)
-    _append_path(cmd, "--wvd-path", s.wvd_path)
 
-    # --- wrapper --------------------------------------------------------
+    # --- wrapper (gamdl 3.x) --------------------------------------------
     if s.use_wrapper:
         cmd.append("--use-wrapper")
-        _append_path(cmd, "--wrapper-account-url", s.wrapper_account_url)
-        _append_path(cmd, "--wrapper-decrypt-ip", s.wrapper_decrypt_ip)
+        _append_path(cmd, "--wrapper-url", s.wrapper_url)
+        _append_path(cmd, "--wrapper-decrypt-host", s.wrapper_decrypt_host)
+        _append_path(cmd, "--wrapper-decrypt-port", s.wrapper_decrypt_port)
 
     cmd.extend(urls)
     return cmd

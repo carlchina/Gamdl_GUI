@@ -1,2 +1,2 @@
 PySide6>=6.5
-gamdl>=2.9
+gamdl>=3.9
