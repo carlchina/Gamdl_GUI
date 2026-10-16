@@ -241,8 +241,8 @@ survive; on Windows the `dist/Gamdl GUI` folder is zipped as-is.
 Releasing is therefore just:
 
 ```bash
-git tag v0.6.0
-git push origin v0.6.0
+git tag v1.0.0
+git push origin v1.0.0
 ```
 
 ### Icon
