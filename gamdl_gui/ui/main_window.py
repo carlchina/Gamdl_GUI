@@ -99,8 +99,8 @@ class MainWindow(QMainWindow):
         self.sidebar.themeChanged.connect(self._change_theme)
         self.main_panel.advancedRequested.connect(self._open_advanced)
 
-        # Webview sign-in is optional: hide the button when pywebview is absent
-        # (e.g. the lite build), leaving manual cookies.txt import.
+        # Webview sign-in is optional: hide the button when pywebview is
+        # absent (a build without it), leaving manual cookies.txt import.
         self.sidebar.login_button.setVisible(login_available())
 
     def _restore_geometry(self) -> None:
